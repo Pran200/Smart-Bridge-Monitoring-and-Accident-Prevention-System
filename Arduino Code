@@ -1,0 +1,117 @@
+#define BLYNK_TEMPLATE_ID "YOUR_TEMPLATE_ID"
+#define BLYNK_TEMPLATE_NAME "BridgeMonitor"
+#define BLYNK_AUTH_TOKEN "YOUR_AUTH_TOKEN"
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <ESP32Servo.h>
+
+char ssid[] = "YOUR_WIFI_NAME";
+char pass[] = "YOUR_WIFI_PASSWORD";
+
+#define WIRE_PIN   4
+#define VIB_PIN    18
+
+#define SERVO_PIN  21
+#define BUZZER_PIN 22
+#define LED_PIN    23
+
+Servo gateServo;
+BlynkTimer timer;
+
+bool collapseSent = false;
+bool vibrationSent = false;
+
+void openGate()
+{
+  gateServo.write(90);
+  Blynk.virtualWrite(V1, "OPEN");
+}
+
+void closeGate()
+{
+  gateServo.write(0);
+  Blynk.virtualWrite(V1, "CLOSED");
+}
+
+void monitorBridge()
+{
+  bool collapse = digitalRead(WIRE_PIN);
+  bool vibration = digitalRead(VIB_PIN);
+
+  if(collapse == HIGH)
+  {
+    closeGate();
+
+    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, HIGH);
+
+    Blynk.virtualWrite(V0, "BRIDGE COLLAPSE");
+
+    if(!collapseSent)
+    {
+      Blynk.logEvent("bridge_alert",
+                     "Bridge Collapse Detected");
+      collapseSent = true;
+    }
+  }
+
+  else if(vibration == HIGH)
+  {
+    closeGate();
+
+    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, HIGH);
+
+    Blynk.virtualWrite(V0, "HIGH VIBRATION");
+
+    if(!vibrationSent)
+    {
+      Blynk.logEvent("vibration_alert",
+                     "Abnormal Bridge Vibration");
+      vibrationSent = true;
+    }
+  }
+
+  else
+  {
+    openGate();
+
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(BUZZER_PIN, LOW);
+
+    Blynk.virtualWrite(V0, "BRIDGE SAFE");
+
+    collapseSent = false;
+    vibrationSent = false;
+  }
+}
+
+void setup()
+{
+  Serial.begin(115200);
+
+  pinMode(WIRE_PIN, INPUT_PULLUP);
+  pinMode(VIB_PIN, INPUT);
+
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(LED_PIN, LOW);
+
+  gateServo.attach(SERVO_PIN);
+
+  openGate();
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  timer.setInterval(1000L, monitorBridge);
+}
+
+void loop()
+{
+  Blynk.run();
+  timer.run();
+}
